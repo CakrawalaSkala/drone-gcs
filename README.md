@@ -1,167 +1,204 @@
-# 🚁 **Ground Control Station**  
-Modern Web-based Ground Control Station untuk Drone MAVLink (ArduPilot / PX4)
+# 🚁 **CAKSA GCS (Ground Control Station)**
 
-Skynet GCS adalah aplikasi *Ground Control Station* berbasis web yang dirancang untuk memonitor dan mengendalikan drone melalui protokol **MAVLink**. Dibangun dengan arsitektur **Decoupled**, aplikasi ini memisahkan Frontend dan Backend sehingga fleksibel, scalable, dan mudah dikembangkan.
+**CAKSA GCS** adalah aplikasi Ground Control Station berbasis web modern untuk memonitor dan mengendalikan drone menggunakan protokol MAVLink (ArduPilot/PX4).
+
+Aplikasi ini menggunakan arsitektur **Decoupled**:
+
+- **Frontend:** React + Leaflet  
+- **Backend:** Python + MAVSDK  
 
 ---
 
-## ✨ Fitur Utama
+## ✨ **Fitur Utama**
 
-### 📡 Real-time Telemetry
+### 📡 **Real-time Telemetry**
+Pantau data penerbangan secara langsung:
 - Altitude  
 - Speed  
 - Heading  
 - Battery  
 - GPS Position  
 
-### 🗺️ Live Map (Leaflet – Dark Mode)
-- Pelacakan posisi drone secara real-time  
-- Custom icon drone  
-- Smooth marker rotation  
+### 🗺 **Live Map & Dual View**
+- Pelacakan posisi drone berbasis Leaflet (Dark Mode)  
+- **Auto-Pan** mengikuti drone  
+- **Dual View:** Map ↔ Camera mock view  
 
-### 🛩️ HUD / Artificial Horizon
-- Menampilkan Pitch & Roll secara real-time
+### 🛩 **Artificial Horizon (HUD)**
+Menampilkan Pitch & Roll secara real-time.
 
-### 🔀 Dual Mode
-| Mode | Deskripsi |
-|------|-----------|
-| **Simulation Mode** | Frontend berjalan tanpa backend (dummy data bawaan). |
-| **Live Mode** | Terhubung ke drone asli atau SITL melalui WebSocket. |
+### 🎯 **Mission Planner (Autonomous)**
+- **Figure 8 Autonomous Mission** (Lemniscate)  
+- **Auto-Land** setelah misi selesai  
+- **Upload Mission**
+- **Start Mission**
 
-### 🎮 Keyboard Offboard Control
-Kendalikan drone seperti game menggunakan WASD.
+### ✅ **Pre-Flight Check**
+Sistem inspeksi sebelum terbang:
+- IMU (Gyro/Accel)
+- Magnetometer
+- GPS 3D Fix & Satellites
+- Battery health
 
-### ⚠️ Failsafe Frontend
-Ketika backend tidak mengirim groundspeed, frontend menghitung kecepatan manual berdasarkan perubahan GPS.
+### 🎮 **Keyboard Offboard Control**
+Kendalikan drone secara manual:
+- **WASD:** Gerak horizontal  
+- **Space:** Naik  
+- **Arrow Keys:** Yaw & altitude  
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+## 🛠 **Teknologi yang Digunakan**
 
 ### **Frontend**
 - React + TypeScript (Vite)
 - Tailwind CSS
-- Leaflet & React-Leaflet
-- Lucide React Icons
+- Leaflet + React-Leaflet
+- Lucide React
 
 ### **Backend**
 - Python 3.9+
 - MAVSDK
-- Websockets  
-- Asyncio  
+- WebSockets
+- Asyncio
 
 ---
 
-## ⚙️ Instalasi & Persiapan
+## ⚙ **Instalasi**
 
-### **1. Setup Backend (Python)**  
-Masuk ke folder `backend/`:
+### 1️⃣ Setup Backend (Python)
+
+Masuk ke folder backend, lalu install dependensi:
 
 ```bash
 pip install mavsdk websockets asyncio
 ```
 
-### **2. Setup Frontend (React + Vite)**  
-Masuk ke folder `frontend/`:
+Jalankan backend:
+
+```bash
+python gcs_backend.py
+```
+
+Jika sukses, muncul:
+
+```
+WebSocket listening on ws://localhost:8080
+*** DRONE CONNECTED! ***
+```
+
+---
+
+## 2️⃣ Setup Frontend (React)
+
+Masuk ke folder frontend:
 
 ```bash
 npm install
 npm run dev
 ```
 
+Buka **http://localhost:5173**
+
 ---
 
-## 🚀 Cara Menjalankan
+## 🛫 **Menjalankan Simulator (SITL)**
 
-### **1. Jalankan Backend**
-Pastikan SITL atau drone sudah aktif.
+### **Opsi A — Windows (Mission Planner)**
+
+##### 1. Install **Mission Planner**
+##### 2. Buka tab **SIMULATION**
+##### 3. Pilih drone **Multirotor**
+##### 4. Tekan **Ctrl + F**
+##### 5. Klik **Mavlink**
+##### 6. Pilih **UDP Host**
+##### 7. Masukkan port **14550**
+####
+---
+
+### **Opsi B — Linux/WSL**
 
 ```bash
+cd ardupilot/ArduCopter
 sim_vehicle.py -v ArduCopter --map --console
 ```
 
-```bash
-python main.py
-```
-
-Jika berhasil, akan muncul:
-
-```
-WebSocket Server berjalan di ws://localhost:8080
-```
-
-### **2. Jalankan Frontend**
-Buka browser:
-
-➡️ http://localhost:5173
-
-Lalu lakukan urutan berikut:
-
-1. Klik **LIVE**  
-2. Status berubah menjadi **CONNECTED**  
-3. Klik **LOITER / HOLD**  
-4. Klik **ARM**  
-5. Klik **TAKEOFF**  
-6. Klik **OFFBOARD (WASD)** untuk kontrol manual
+Tunggu sampai muncul **GPS: 3D Fix**
 
 ---
 
-## 🎮 Kontrol Keyboard (Mode Offboard)
+## 🚀 **Workflow Menjalankan Aplikasi**
+
+##### 1. Jalankan **SITL**  
+##### 2. Jalankan **Backend**  
+   ```bash
+   python gcs_backend.py
+   ```
+##### 3. Jalankan **Frontend**  
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## ✈️ Setelah Connect
+
+### **1. Pre-Flight Check**
+- Masuk tab **Pre-Flight Check**
+- Tekan **RUN DIAGNOSTICS**
+
+### **2. Takeoff Manual**
+- LOITER / HOLD  
+- ARM  
+- TAKEOFF  
+
+### **3. Mission Planner**
+- Klik **UPLOAD**  
+- Klik **START**  
+  → Drone membentuk angka 8, lalu mendarat otomatis.
+
+### **4. Mode Keyboard (Offboard)**
+- Klik **OFFBOARD (MANUAL)**
+- Gunakan kontrol keyboard.
+
+---
+
+## 🎮 **Kontrol Keyboard (Offboard Mode)**
 
 | Tombol | Fungsi | Arah |
-|--------|--------|--------|
-| **W** | Maju | Forward |
-| **S** | Mundur | Backward |
-| **A** | Geser kiri | Left |
-| **D** | Geser kanan | Right |
-| **Space** | Naik | Throttle Up |
-| **↑** | Naik | Altitude Up |
-| **↓** | Turun | Altitude Down |
-| **←** | Putar kiri | Yaw Left |
-| **→** | Putar kanan | Yaw Right |
+|--------|--------|-------|
+| W | Maju | Forward |
+| S | Mundur | Backward |
+| A | Geser kiri | Strafe Left |
+| D | Geser kanan | Strafe Right |
+| Spasi | Naik | Throttle Up |
+| ↑ | Naik | Altitude Up |
+| ↓ | Turun | Altitude Down |
+| ← | Putar kiri | Yaw Left |
+| → | Putar kanan | Yaw Right |
 
 ---
 
-## 🔌 Cara Menghubungkan ke Drone Asli
+## 🔌 **Menghubungkan ke Drone Asli**
 
-### Perangkat yang Dibutuhkan
-- Flight Controller (Pixhawk, Cube, Durandal, dll)  
-- Firmware ArduPilot atau PX4  
-- Telemetry Radio (SiK 433/915 MHz)
+##### 1. Hubungkan Flight Controller (Pixhawk/Cube)  
+##### 2. Sambungkan **SiK Telemetry** ke laptop  
+##### 3. Cek COM Port  
+##### 4. Edit `gcs_backend.py`:
 
-### Konfigurasi Backend
-
-Edit file **gcs_backend.py**:
-
+### Untuk Telemetry Radio
 ```python
-# --- KONFIGURASI KONEKSI ---
-
-# OPSI 1: SITL / WiFi Drone
-# CONNECTION_STRING = "udp://:14550"
-
-# OPSI 2: Telemetry USB (Windows)
 CONNECTION_STRING = "serial://COM3:57600"
+```
 
-# OPSI 3: Telemetry USB (Linux/Mac)
-# CONNECTION_STRING = "serial:///dev/ttyUSB0:57600"
+### Untuk Simulator (default)
+```python
+CONNECTION_STRING = "udp://:14550"
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 📝 **Lisensi**
 
-### 1️⃣ Drone Auto-Disarm setelah Arm  
-**Penyebab:** Mode STABILIZE butuh input throttle manual.  
-**Solusi:** Gunakan mode **LOITER / HOLD** sebelum Arm.
+Proyek ini digunakan untuk pengembangan Ground Control Station CAKSA.
 
-### 2️⃣ Speed selalu 0  
-**Penyebab:** Backend tidak mengirim metrics speed.  
-**Solusi:** Frontend sudah ada fallback speed dari perubahan GPS.
-
-### 3️⃣ Peta tidak muncul  
-Pastikan koneksi internet aktif agar tiles OpenStreetMap/CartoDB dapat dimuat.
-
----
-
-## 📝 Lisensi
-Proyek ini dibuat untuk keperluan edukasi dan riset pembuatan GCS mandiri. Bebas untuk dimodifikasi.
