@@ -415,13 +415,13 @@ const App = () => {
          <button onClick={() => setActiveTab('missions')} className={`p-3 rounded-xl transition-all ${activeTab === 'missions' ? 'bg-gray-700 text-blue-400 border border-gray-600' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`} title="Mission Planner"><MapIcon size={24} /></button>
          <button onClick={() => setActiveTab('preflight')} className={`p-3 rounded-xl transition-all ${activeTab === 'preflight' ? 'bg-gray-700 text-blue-400 border border-gray-600' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`} title="Pre-Flight Check"><ClipboardCheck size={24} /></button>
          <div className="flex-1"></div>
-         <div className="text-[10px] text-gray-500 font-mono rotate-180" style={{writingMode: 'vertical-rl'}}>SKYNET GCS v3.5</div>
+         <div className="text-[10px] text-gray-500 font-mono rotate-180" style={{writingMode: 'vertical-rl'}}>CAKSA GCS v3.5</div>
       </nav>
 
       <div className="flex-1 flex flex-col min-w-0">
           <header className="h-20 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 shadow-md z-20">
              <div className="flex flex-col">
-                <h1 className="font-bold text-xl tracking-wider text-white">SKYNET <span className="text-blue-400">GCS</span></h1>
+                <h1 className="font-bold text-xl tracking-wider text-white">CAKSA <span className="text-blue-400">GCS</span></h1>
                 <div className="flex items-center gap-2 mt-1">
                     <span className={`w-2 h-2 rounded-full ${telemetry.connected ? 'bg-green-500' : 'bg-red-500'}`}></span>
                     <span className="text-xs text-gray-400 font-mono">{telemetry.connected ? 'LINK ACTIVE' : 'NO LINK'}</span>
