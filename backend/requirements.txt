@@ -1,3 +1,5 @@
 mavsdk
 websockets
 asyncio
+sounddevice
+vosk

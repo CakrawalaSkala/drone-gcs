@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Activity, BatteryCharging, Compass, Power, Send, Signal, 
   AlertTriangle, ArrowUp, Gamepad2, Anchor, LayoutDashboard, 
@@ -27,6 +27,12 @@ const styles = `
     70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
   }
+
+  /* Rotasi Marker di Peta */
+  .drone-marker-arrow {
+    transition: transform 0.2s linear;
+    transform-origin: center center;
+  }
 `;
 
 // --- TYPES ---
@@ -45,79 +51,55 @@ const Drone3DView = ({ telemetry, isMain }: { telemetry: TelemetryData, isMain: 
     const containerRef = useRef<HTMLDivElement>(null);
     const sceneRef = useRef<any>(null);
     const droneRef = useRef<any>(null);
+    const rendererRef = useRef<any>(null);
+    const cameraRef = useRef<any>(null);
 
     useEffect(() => {
         if (!document.getElementById('three-js')) {
-            const script = document.createElement("script");
-            script.id = 'three-js';
-            script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-            script.async = true;
-            script.onload = init3D;
-            document.head.appendChild(script);
-        } else {
-            setTimeout(init3D, 100);
-        }
+            const script = document.createElement("script"); script.id = 'three-js'; script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"; script.async = true; 
+            script.onload = init3D; document.head.appendChild(script);
+        } else { setTimeout(init3D, 100); }
 
         function init3D() {
             const THREE = (window as any).THREE;
             if (!THREE || !containerRef.current || sceneRef.current) return;
 
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111827);
-            const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
-            scene.add(gridHelper);
-
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
+            const scene = new THREE.Scene(); scene.background = new THREE.Color(0x111827);
+            const camera = new THREE.PerspectiveCamera(75, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 1000);
+            camera.position.set(0, 2, 3); camera.lookAt(0, 0, 0);
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+            containerRef.current.innerHTML = ''; 
+            containerRef.current.appendChild(renderer.domElement);
+            
+            // Grid & Light
+            scene.add(new THREE.GridHelper(20, 20, 0x444444, 0x222222));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
             const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
             dirLight.position.set(5, 10, 7);
             scene.add(dirLight);
 
-            const camera = new THREE.PerspectiveCamera(75, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 1000);
-            camera.position.set(0, 2, 3);
-            camera.lookAt(0, 0, 0);
-
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
-            containerRef.current.appendChild(renderer.domElement);
-
+            // Drone Model (Simplified Quad)
             const droneGroup = new THREE.Group();
-            const bodyGeo = new THREE.BoxGeometry(0.4, 0.1, 0.8);
-            const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3b82f6 });
-            const body = new THREE.Mesh(bodyGeo, bodyMat);
-            droneGroup.add(body);
-
-            const armGeo = new THREE.BoxGeometry(1.2, 0.05, 0.05);
-            const armMat = new THREE.MeshLambertMaterial({ color: 0x4b5563 });
-            const arm1 = new THREE.Mesh(armGeo, armMat);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.8), new THREE.MeshStandardMaterial({ color: 0x3b82f6 }));
+            const arm1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: 0x4b5563 }));
             arm1.rotation.y = Math.PI / 4;
-            const arm2 = new THREE.Mesh(armGeo, armMat);
+            const arm2 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: 0x4b5563 }));
             arm2.rotation.y = -Math.PI / 4;
-            droneGroup.add(arm1);
-            droneGroup.add(arm2);
+            const nose = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+            nose.rotation.x = Math.PI / 2;
+            nose.position.z = -0.5;
 
-            const propGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.02, 32);
-            const propMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
-            const positions = [{x: 0.4, z: 0.4}, {x: -0.4, z: -0.4}, {x: -0.4, z: 0.4}, {x: 0.4, z: -0.4}];
-            positions.forEach(pos => {
-                const prop = new THREE.Mesh(propGeo, propMat);
-                prop.position.set(pos.x, 0.05, pos.z);
-                droneGroup.add(prop);
-            });
-
-            const arrowGeo = new THREE.ConeGeometry(0.1, 0.3, 8);
-            const arrowMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-            const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-            arrow.position.set(0, 0.1, -0.5);
-            arrow.rotation.x = -Math.PI / 2;
-            droneGroup.add(arrow);
-
+            droneGroup.add(body, arm1, arm2, nose);
             scene.add(droneGroup);
-            sceneRef.current = { scene, camera, renderer };
+            
+            sceneRef.current = scene;
+            cameraRef.current = camera;
+            rendererRef.current = renderer;
             droneRef.current = droneGroup;
 
             const animate = () => {
-                if (!sceneRef.current) return;
                 requestAnimationFrame(animate);
                 renderer.render(scene, camera);
             };
@@ -126,127 +108,113 @@ const Drone3DView = ({ telemetry, isMain }: { telemetry: TelemetryData, isMain: 
     }, []);
 
     useEffect(() => {
-        if (!droneRef.current || !telemetry) return;
-        const pitchRad = telemetry.pitch * (Math.PI / 180);
-        const rollRad = telemetry.roll * (Math.PI / 180);
-        const yawRad = -telemetry.heading * (Math.PI / 180);
-        droneRef.current.rotation.set(pitchRad, yawRad, -rollRad);
-    }, [telemetry.pitch, telemetry.roll, telemetry.heading]);
+        if (droneRef.current) {
+            droneRef.current.rotation.x = telemetry.pitch * (Math.PI/180);
+            droneRef.current.z = -telemetry.roll * (Math.PI/180);
+            droneRef.current.y = -telemetry.heading * (Math.PI/180);
+        }
+    }, [telemetry]);
 
     useEffect(() => {
-        if (!sceneRef.current || !containerRef.current) return;
-        const { camera, renderer } = sceneRef.current;
-        camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+        if (rendererRef.current && cameraRef.current && containerRef.current) {
+            const w = containerRef.current.clientWidth;
+            const h = containerRef.current.clientHeight;
+            cameraRef.current.aspect = w / h;
+            cameraRef.current.updateProjectionMatrix();
+            rendererRef.current.setSize(w, h);
+        }
     }, [isMain]);
 
-    return (
-        <div ref={containerRef} className="w-full h-full bg-[#111827] relative">
-            {!isMain && <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-[10px] font-bold text-white pointer-events-none">3D MODEL</div>}
-            {isMain && (
-                <div className="absolute bottom-4 left-4 bg-black/50 p-2 rounded text-xs font-mono text-green-400 pointer-events-none">
-                    <div>PITCH: {telemetry.pitch.toFixed(1)}°</div>
-                    <div>ROLL:  {telemetry.roll.toFixed(1)}°</div>
-                    <div>YAW:   {telemetry.heading.toFixed(0)}°</div>
-                </div>
-            )}
-        </div>
-    );
+    return <div ref={containerRef} className="w-full h-full bg-[#111827] relative">
+        {!isMain && <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-[10px] font-bold text-white">3D</div>}
+    </div>;
 };
 
-// --- COMPONENT: LIVE VIDEO FEED ---
+// --- LIVE VIDEO FEED ---
 const LiveVideoFeed = ({ telemetry, isMain }: { telemetry: TelemetryData, isMain: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const [deviceId, setDeviceId] = useState<string>('');
-
     useEffect(() => {
-        const getCam = async () => {
-            try {
-                await navigator.mediaDevices.getUserMedia({ video: true });
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoInput = devices.find(d => d.kind === 'videoinput');
-                if (videoInput) setDeviceId(videoInput.deviceId);
-            } catch (e) { console.log("Cam permission error"); }
-        };
-        getCam();
+        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => { if(videoRef.current) videoRef.current.srcObject = stream; }).catch(()=>{});
     }, []);
-
-    useEffect(() => {
-        if (!deviceId) return;
-        const start = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
-                if (videoRef.current) videoRef.current.srcObject = stream;
-            } catch (e) {}
-        };
-        start();
-    }, [deviceId]);
-
     return (
-        <div className="w-full h-full relative bg-black flex flex-col items-center justify-center overflow-hidden group">
+        <div className="w-full h-full relative bg-black flex flex-col items-center justify-center overflow-hidden">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            {isMain && (
-                <div className="absolute inset-4 border-2 border-white/20 rounded-lg pointer-events-none flex flex-col justify-between p-4 z-20">
-                    <div className="flex justify-between text-green-400 font-mono text-sm bg-black/20 p-1 rounded backdrop-blur-sm">
-                        <span className="flex items-center gap-2"><div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div> LIVE</span>
-                        <span>BAT: {telemetry.battery_voltage.toFixed(1)}V</span>
-                    </div>
-                    <div className="flex justify-center text-white/50"><div className="w-8 h-8 border border-white/50 rounded-full flex items-center justify-center">+</div></div>
-                    <div className="flex justify-between text-green-400 font-mono text-sm bg-black/20 p-1 rounded backdrop-blur-sm">
-                        <span>ALT: {telemetry.altitude_relative.toFixed(1)}m</span>
-                        <span>SPD: {telemetry.ground_speed.toFixed(1)}m/s</span>
-                    </div>
-                </div>
-            )}
-            {!isMain && <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-[10px] font-bold text-white">CAMERA</div>}
+            {isMain && <div className="absolute inset-4 border-2 border-white/20 rounded-lg pointer-events-none p-4 z-20"><span className="bg-red-600 px-2 py-1 rounded text-xs text-white animate-pulse">LIVE FEED</span></div>}
+            {!isMain && <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-[10px] font-bold text-white">CAM</div>}
         </div>
     );
 };
 
-// --- COMPONENT: MAP VIEW WRAPPER ---
+// --- MAP VIEW ---
 const MapView = ({ id, telemetry, pathData, isMain }: any) => {
-    const mapInstance = useRef<any>(null);
-    const markerInstance = useRef<any>(null);
-    const polylineInstance = useRef<any>(null);
+    const mapRef = useRef<any>(null);
+    const markerRef = useRef<any>(null);
+    const polylineRef = useRef<any>(null);
 
     useEffect(() => {
         if (!document.getElementById('leaflet-js')) {
-            const script = document.createElement("script"); script.id = 'leaflet-js'; script.src = "https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"; script.async = true; 
-            script.onload = init; document.head.appendChild(script);
-            const link = document.createElement("link"); link.id = 'leaflet-css'; link.rel = "stylesheet"; link.href = "https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"; document.head.appendChild(link);
+            const s = document.createElement("script"); s.id = 'leaflet-js'; s.src = "https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"; s.async = true; s.onload = init; document.head.appendChild(s);
+            const l = document.createElement("link"); l.id = 'leaflet-css'; l.rel = "stylesheet"; l.href = "https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"; document.head.appendChild(l);
         } else { setTimeout(init, 100); }
-
         function init() {
             const L = (window as any).L;
-            if (!L || mapInstance.current || !document.getElementById(id)) return;
+            if (!L || mapRef.current || !document.getElementById(id)) return;
+            
             const startLat = telemetry.latitude !== 0 ? telemetry.latitude : -6.2088;
             const startLng = telemetry.longitude !== 0 ? telemetry.longitude : 106.8456;
+
             const map = L.map(id, { zoomControl: false, attributionControl: false }).setView([startLat, startLng], 16);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
-            const droneIcon = L.divIcon({ html: `<div style="width: 32px; height: 32px; transform: translate(-50%, -50%);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px #000);"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>`, className: 'custom-drone-icon', iconSize: [32, 32], iconAnchor: [16, 16] });
+            
+            // Custom Drone Icon (SVG)
+            const droneIcon = L.divIcon({ 
+                html: `<div class="drone-marker-arrow" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" stroke="white" stroke-width="1.5" style="filter: drop-shadow(0 0 4px rgba(0,0,0,0.8)); width: 100%; height: 100%;">
+                            <path d="M12 2L2 22l10-5 10 5-10-20z"/>
+                        </svg>
+                       </div>`, 
+                className: '', 
+                iconSize: [40, 40], 
+                iconAnchor: [20, 20] 
+            });
+            
             const marker = L.marker([startLat, startLng], { icon: droneIcon }).addTo(map);
-            const polyline = L.polyline(pathData, { color: 'red', weight: 2, opacity: 0.6 }).addTo(map);
-            mapInstance.current = map; markerInstance.current = marker; polylineInstance.current = polyline;
+            const polyline = L.polyline(pathData, { color: 'red', weight: 3, opacity: 0.7 }).addTo(map);
+            
+            mapRef.current = map; 
+            markerRef.current = marker;
+            polylineRef.current = polyline;
         }
-        return () => { if(mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; } };
     }, [id]);
 
+    // Update Map Position & Rotation
     useEffect(() => {
-        if (!mapInstance.current || telemetry.latitude === 0) return;
+        if(!mapRef.current || telemetry.latitude===0) return;
         const pos = [telemetry.latitude, telemetry.longitude];
-        markerInstance.current.setLatLng(pos);
-        if (isMain && telemetry.connected) mapInstance.current.panTo(pos, { animate: true, duration: 0.5 });
-        else if (!isMain) mapInstance.current.setView(pos);
-        if (telemetry.armed) polylineInstance.current.setLatLngs(pathData);
-    }, [telemetry.latitude, telemetry.longitude, pathData]);
+        
+        // Update Marker Position
+        if(markerRef.current) {
+            markerRef.current.setLatLng(pos);
+            
+            // Update Rotation (Heading)
+            const iconEl = markerRef.current.getElement();
+            if (iconEl) {
+                const arrow = iconEl.querySelector('.drone-marker-arrow');
+                if (arrow) arrow.style.transform = `rotate(${telemetry.heading}deg)`;
+            }
+        }
 
-    return (
-        <div id={id} className="w-full h-full relative">
-            {!isMain && <div className="absolute top-2 left-2 z-[1000] bg-black/50 px-2 py-1 rounded text-[10px] font-bold text-white pointer-events-none">MAP</div>}
-        </div>
-    );
-}
+        // Update Path
+        if(polylineRef.current) {
+            polylineRef.current.setLatLngs(pathData);
+        }
+
+        if(isMain && telemetry.connected) mapRef.current.panTo(pos, { animate: true, duration: 0.2 });
+        else if(!isMain) mapRef.current.setView(pos);
+    }, [telemetry.latitude, telemetry.longitude, telemetry.heading, pathData]);
+
+    return <div id={id} className="w-full h-full relative">{!isMain && <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-[10px] text-white">MAP</div>}</div>;
+};
 
 // --- SUB-COMPONENTS ---
 const FlightModeButton = ({ mode, icon: Icon, label, currentMode, onClick }: any) => {
@@ -259,15 +227,11 @@ const FlightModeButton = ({ mode, icon: Icon, label, currentMode, onClick }: any
 const MissionCard = ({ title, icon: Icon, description, onUpload }: any) => (
     <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600 hover:border-blue-500 transition-all cursor-pointer group" onClick={onUpload}>
         <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-blue-900/50 rounded-lg flex items-center justify-center text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <Icon size={20} />
-            </div>
+            <div className="w-10 h-10 bg-blue-900/50 rounded-lg flex items-center justify-center text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Icon size={20} /></div>
             <h4 className="font-bold text-gray-200 group-hover:text-white">{title}</h4>
         </div>
         <p className="text-xs text-gray-400 mb-3">{description}</p>
-        <div className="flex items-center gap-2 text-xs text-blue-400 font-bold">
-            <UploadCloud size={14}/> CLICK TO UPLOAD
-        </div>
+        <div className="flex items-center gap-2 text-xs text-blue-400 font-bold"><UploadCloud size={14}/> CLICK TO UPLOAD</div>
     </div>
 );
 
@@ -301,12 +265,12 @@ const App = () => {
   });
 
   const [preflightData, setPreflightData] = useState<PreflightItem[]>([
-      { id: 'imu', label: 'IMU Sensors', status: 'PENDING', detail: 'Waiting Check...' },
+      { id: 'imu', label: 'IMU Sensors (Gyro/Accel)', status: 'PENDING', detail: 'Waiting Check...' },
       { id: 'mag', label: 'Magnetometer', status: 'PENDING', detail: 'Waiting Check...' },
-      { id: 'gps', label: 'GPS Lock', status: 'PENDING', detail: 'Waiting Check...' },
-      { id: 'bat', label: 'Battery Level', status: 'PENDING', detail: 'Waiting Check...' },
-      { id: 'rc', label: 'RC Signal', status: 'PENDING', detail: 'Waiting Check...' },
-      { id: 'home', label: 'Home Position', status: 'PENDING', detail: 'Waiting Check...' }
+      { id: 'gps', label: 'GPS Lock (>6 Sats)', status: 'PENDING', detail: 'Waiting Check...' },
+      { id: 'bat', label: 'Battery Voltage', status: 'PENDING', detail: 'Waiting Check...' },
+      { id: 'rc', label: 'RC Signal Strength', status: 'PENDING', detail: 'Waiting Check...' },
+      { id: 'home', label: 'Home Position Set', status: 'PENDING', detail: 'Waiting Check...' }
   ]);
 
   const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -318,8 +282,7 @@ const App = () => {
   const recognitionRef = useRef<any>(null);
 
   const addLog = (type: string, message: string) => {
-    const now = new Date();
-    setLogs(prev => [...prev.slice(-49), { id: Date.now(), timestamp: `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`, type, message }]);
+    setLogs(prev => [...prev.slice(-49), { id: Date.now(), timestamp: new Date().toLocaleTimeString(), type, message }]);
   };
 
   useEffect(() => { if (activeTab === 'dashboard') logsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs, activeTab]);
@@ -336,7 +299,10 @@ const App = () => {
             if (data.type === 'PREFLIGHT_REPORT') { setPreflightData(data.report); addLog('INFO', 'Pre-flight check completed.'); return; }
             if(data.mode) currentModeRef.current = data.mode;
             setTelemetry(prev => {
-                if(prev.armed && data.latitude !== 0) pathDataRef.current.push([data.latitude, data.longitude]);
+                // Record Path if Armed and Position Valid
+                if(prev.armed && data.latitude !== 0 && data.longitude !== 0) {
+                    pathDataRef.current.push([data.latitude, data.longitude]);
+                }
                 return { ...prev, ...data }
             });
         } catch (e) {}
@@ -347,88 +313,100 @@ const App = () => {
   }, []);
 
   // --- COMMANDS ---
-  const sendCommand = (payload: any) => { if(wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(payload)); };
-  const handleArm = () => { if (!telemetry.armed && telemetry.mode.includes("STABILIZE")) addLog('WARN', 'Mode STABILIZE! Switch to HOLD first.'); sendCommand({ type: 'COMMAND_LONG', command: 'MAV_CMD_COMPONENT_ARM_DISARM', param1: telemetry.armed ? 0 : 1 }); };
+  const sendCommand = (payload: any) => { if(wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(payload)); };
   const handleModeChange = (newMode: string) => sendCommand({ type: 'SET_MODE', mode: newMode });
+  const handleArm = () => sendCommand({ type: 'COMMAND_LONG', command: 'MAV_CMD_COMPONENT_ARM_DISARM', param1: telemetry.armed ? 0 : 1 });
   const runPreflightCheck = () => { addLog('CMD', 'Running Diagnostics...'); setPreflightData(prev => prev.map(p => ({...p, status: 'PENDING', detail: 'Checking...'}))); sendCommand({ type: 'REQ_PREFLIGHT' }); };
-  const startMission = () => { addLog('CMD', 'Sending START Command...'); sendCommand({ type: 'SET_MODE', mode: 'MISSION' }); };
-
-  // Mission Upload Handlers
-  const uploadFigure8 = () => { addLog('CMD', 'Uploading Figure 8...'); sendCommand({ type: 'UPLOAD_MISSION_FIGURE8' }); };
+  const uploadFigure8 = () => { addLog('CMD', 'Uploading Mission...'); sendCommand({ type: 'UPLOAD_MISSION_FIGURE8' }); };
   const uploadSquare = () => { addLog('CMD', 'Uploading Square...'); sendCommand({ type: 'UPLOAD_MISSION_SQUARE' }); };
   const uploadScan = () => { addLog('CMD', 'Uploading Grid Scan...'); sendCommand({ type: 'UPLOAD_MISSION_SCAN' }); };
   const uploadSpiral = () => { addLog('CMD', 'Uploading Spiral...'); sendCommand({ type: 'UPLOAD_MISSION_SPIRAL' }); };
+  const startMission = () => { addLog('CMD', 'Start Mission...'); sendCommand({ type: 'SET_MODE', mode: 'MISSION' }); };
 
-  // --- VOICE ---
+  // --- VOICE CONTROL ---
   useEffect(() => {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) return;
       const recognition = new SpeechRecognition();
-      recognition.continuous = true; recognition.interimResults = false; recognition.lang = 'en-US';
+      recognition.continuous = true; recognition.interimResults = false; 
+      recognition.lang = 'id-ID'; // Set to Indonesian
+
       recognition.onresult = (event: any) => {
           const t = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
           addLog('VOICE', `"${t}"`);
-          if (t.includes('take off')) handleModeChange('TAKEOFF');
-          else if (t.includes('land')) handleModeChange('LAND');
-          else if (t.includes('rtl')) handleModeChange('RTL');
+          
+          // Basic Modes
+          if (t.includes('take off') || t.includes('terbang')) handleModeChange('TAKEOFF');
+          else if (t.includes('land') || t.includes('mendarat')) handleModeChange('LAND');
+          else if (t.includes('rtl') || t.includes('pulang')) handleModeChange('RTL');
+          else if (t.includes('hold') || t.includes('diam') || t.includes('stop')) handleModeChange('HOLD');
+          
+          // Arming
+          else if (t.includes('nyalakan mesin') || t.includes('arm')) {
+              if(!telemetry.armed) handleArm();
+          }
+          else if (t.includes('matikan mesin') || t.includes('disarm')) {
+              if(telemetry.armed) handleArm();
+          }
+
+          // Manual Control (Nudge)
+          // "Maju" -> Forward 5m/s
+          else if (t.includes('maju') || t.includes('forward')) sendCommand({ type: 'MANUAL_CONTROL', x: 5, y: 0, z: 0, r: 0 });
+          else if (t.includes('mundur') || t.includes('backward')) sendCommand({ type: 'MANUAL_CONTROL', x: -5, y: 0, z: 0, r: 0 });
+          else if (t.includes('kiri') || t.includes('left')) sendCommand({ type: 'MANUAL_CONTROL', x: 0, y: -5, z: 0, r: 0 });
+          else if (t.includes('kanan') || t.includes('right')) sendCommand({ type: 'MANUAL_CONTROL', x: 0, y: 5, z: 0, r: 0 });
+          else if (t.includes('naik') || t.includes('up') || t.includes('terbang lebih tinggi')) sendCommand({ type: 'MANUAL_CONTROL', x: 0, y: 0, z: -2, r: 0 }); // NED Z- is Up
+          else if (t.includes('turun') || t.includes('down')) sendCommand({ type: 'MANUAL_CONTROL', x: 0, y: 0, z: 2, r: 0 });
       };
       recognition.onend = () => { if (isVoiceActive) recognition.start(); };
       recognitionRef.current = recognition;
-  }, [isVoiceActive]);
+  }, [isVoiceActive, telemetry.armed]); // Re-bind on arm change to update state closure
 
   const toggleVoice = () => {
       if (isVoiceActive) { recognitionRef.current?.stop(); setIsVoiceActive(false); addLog('SYS', 'Voice OFF'); } 
-      else { try { recognitionRef.current?.start(); setIsVoiceActive(true); addLog('SYS', 'Voice ON'); } catch(e) {} }
+      else { try { recognitionRef.current?.start(); setIsVoiceActive(true); addLog('SYS', 'Voice ON (ID)'); } catch(e) {} }
   };
 
   // --- KEYBOARD ---
   useEffect(() => {
-    const SPEED = 5.0, YAW_SPEED = 40.0, CLIMB_SPEED = 2.0; 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
       if (!currentModeRef.current.includes("OFFBOARD")) return;
-      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"," "].indexOf(e.key) > -1 || e.code === "Space") e.preventDefault();
+      if(["ArrowUp","ArrowDown","Space"].indexOf(e.code) > -1) e.preventDefault();
       let x = 0, y = 0, z = 0, r = 0;
-      if (e.key === 'w' || e.key === 'W') x = SPEED; if (e.key === 's' || e.key === 'S') x = -SPEED;   
-      if (e.key === 'a' || e.key === 'A') y = -SPEED; if (e.key === 'd' || e.key === 'D') y = SPEED;    
-      if (e.key === 'ArrowLeft') r = -YAW_SPEED; if (e.key === 'ArrowRight') r = YAW_SPEED;
-      if (e.key === 'ArrowUp') z = -CLIMB_SPEED; if (e.key === 'ArrowDown') z = CLIMB_SPEED;
-      if (e.code === 'Space') z = -CLIMB_SPEED;
-      if (x !== 0 || y !== 0 || z !== 0 || r !== 0) wsRef.current.send(JSON.stringify({ type: 'MANUAL_CONTROL', x, y, z, r }));
+      if (e.key === 'w') x = 5; if (e.key === 's') x = -5;   
+      if (e.key === 'a') y = -5; if (e.key === 'd') y = 5;    
+      if (e.key === 'ArrowLeft') r = -40; if (e.key === 'ArrowRight') r = 40;
+      if (e.key === 'ArrowUp') z = -2; if (e.key === 'ArrowDown') z = 2;
+      if (e.code === 'Space') z = -2;
+      if (x||y||z||r) sendCommand({ type: 'MANUAL_CONTROL', x, y, z, r });
     };
     const handleKeyUp = () => { if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && currentModeRef.current.includes("OFFBOARD")) wsRef.current.send(JSON.stringify({ type: 'MANUAL_CONTROL', x: 0, y: 0, z: 0, r: 0 })); };
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, []);
 
-  // --- VIEW SWITCHER HELPER ---
-  const switchView = (target: 'map' | 'camera' | '3d') => {
-      setMainView(target);
-  };
+  // --- VIEW SWITCHER ---
+  const switchView = (target: 'map' | 'camera' | '3d') => { setMainView(target); };
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100 font-sans overflow-hidden">
       <style>{styles}</style>
       <nav className="w-20 bg-gray-800 border-r border-gray-700 flex flex-col items-center py-6 gap-6 z-30 shadow-xl">
          <div className="bg-blue-600 p-3 rounded-xl mb-4 shadow-lg shadow-blue-900/50"><Send size={24} className="text-white" /></div>
-         <button onClick={() => setActiveTab('dashboard')} className={`p-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-gray-700 text-blue-400 border border-gray-600' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`} title="Dashboard"><LayoutDashboard size={24} /></button>
-         <button onClick={() => setActiveTab('missions')} className={`p-3 rounded-xl transition-all ${activeTab === 'missions' ? 'bg-gray-700 text-blue-400 border border-gray-600' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`} title="Mission Planner"><MapIcon size={24} /></button>
-         <button onClick={() => setActiveTab('preflight')} className={`p-3 rounded-xl transition-all ${activeTab === 'preflight' ? 'bg-gray-700 text-blue-400 border border-gray-600' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`} title="Pre-Flight Check"><ClipboardCheck size={24} /></button>
+         <button onClick={() => setActiveTab('dashboard')} className={`p-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-white'}`}><LayoutDashboard size={24} /></button>
+         <button onClick={() => setActiveTab('missions')} className={`p-3 rounded-xl transition-all ${activeTab === 'missions' ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-white'}`}><MapIcon size={24} /></button>
+         <button onClick={() => setActiveTab('preflight')} className={`p-3 rounded-xl transition-all ${activeTab === 'preflight' ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-white'}`}><ClipboardCheck size={24} /></button>
          <div className="flex-1"></div>
-         <div className="text-[10px] text-gray-500 font-mono rotate-180" style={{writingMode: 'vertical-rl'}}>CAKSA GCS v3.5</div>
+         <div className="text-[10px] text-gray-500 font-mono rotate-180" style={{writingMode: 'vertical-rl'}}>CAKSA GCS v5.0</div>
       </nav>
 
       <div className="flex-1 flex flex-col min-w-0">
           <header className="h-20 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6 shadow-md z-20">
              <div className="flex flex-col">
                 <h1 className="font-bold text-xl tracking-wider text-white">CAKSA <span className="text-blue-400">GCS</span></h1>
-                <div className="flex items-center gap-2 mt-1">
-                    <span className={`w-2 h-2 rounded-full ${telemetry.connected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                    <span className="text-xs text-gray-400 font-mono">{telemetry.connected ? 'LINK ACTIVE' : 'NO LINK'}</span>
-                </div>
+                <span className="text-xs text-gray-400 font-mono">{telemetry.connected ? 'LINK ACTIVE' : 'NO LINK'}</span>
              </div>
              
-             {/* Flight Modes & Voice Toggle */}
              <div className="flex items-center gap-4 bg-gray-900/50 px-6 py-2 rounded-full border border-gray-700">
                 <span className="text-xs text-gray-500 font-bold mr-2">MODES</span>
                 <FlightModeButton mode="HOLD" icon={Anchor} label="LOITER / HOLD" currentMode={telemetry.mode} onClick={handleModeChange} />
@@ -437,65 +415,40 @@ const App = () => {
                 <FlightModeButton mode="RTL" icon={Home} label="RETURN TO LAUNCH" currentMode={telemetry.mode} onClick={handleModeChange} />
                 <FlightModeButton mode="OFFBOARD" icon={Gamepad2} label="OFFBOARD (MANUAL)" currentMode={telemetry.mode} onClick={handleModeChange} />
                 <div className="w-px h-8 bg-gray-700 mx-2"></div>
-                
-                {/* VOICE TOGGLE BUTTON */}
-                <button 
-                    onClick={toggleVoice}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border-2 
-                    ${isVoiceActive ? 'bg-red-600 border-red-400 text-white mic-active' : 'bg-gray-700 border-gray-600 text-gray-400'}`}
-                    title="Voice Control"
-                >
-                    {isVoiceActive ? <Mic size={18}/> : <MicOff size={18}/>}
-                </button>
+                <button onClick={toggleVoice} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isVoiceActive ? 'bg-red-600 border-red-400 mic-active' : 'bg-gray-700 border-gray-600'}`}>{isVoiceActive ? <Mic size={18}/> : <MicOff size={18}/>}</button>
              </div>
 
              <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                     <BatteryCharging size={24} className={telemetry.battery_remaining < 20 ? 'text-red-500' : 'text-green-500'} />
-                    <div className="flex flex-col items-end leading-none"><span className="text-xl font-mono font-bold">{telemetry.battery_voltage.toFixed(1)}V</span><span className="text-xs text-gray-400">{Math.round(telemetry.battery_remaining)}%</span></div>
+                    <div className="flex flex-col items-end leading-none">
+                        <span className="text-xl font-mono font-bold">{telemetry.battery_voltage.toFixed(1)}V</span>
+                        <span className="text-xs text-gray-400">{Math.round(telemetry.battery_remaining)}%</span>
+                    </div>
                 </div>
-                <button onClick={handleArm} className={`px-6 py-2 rounded-full font-bold tracking-widest transition-all shadow-lg flex items-center gap-2 ${telemetry.armed ? 'bg-red-600 hover:bg-red-700 shadow-red-900/50 text-white animate-pulse' : 'bg-green-600 hover:bg-green-700 shadow-green-900/50 text-white'}`}><Power size={18} />{telemetry.armed ? 'DISARM' : 'ARM'}</button>
+                <button onClick={handleArm} className={`px-6 py-2 rounded-full font-bold tracking-widest transition-all shadow-lg flex items-center gap-2 ${telemetry.armed ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-green-600 hover:bg-green-700'}`}><Power size={18} />{telemetry.armed ? 'DISARM' : 'ARM'}</button>
              </div>
           </header>
 
           <main className="flex-1 flex overflow-hidden relative">
-             {/* DASHBOARD WITH PIP (PICTURE IN PICTURE) */}
              {activeTab === 'dashboard' && (
                  <>
                     <div className="flex-1 relative bg-gray-900 overflow-hidden">
-                        
-                        {/* 1. LAYER BAWAH (MAIN VIEW) */}
-                        <div className="absolute inset-0 z-0">
-                            {mainView === 'map' && <MapView id="map-container-main" telemetry={telemetry} pathData={pathDataRef.current} isMain={true} />}
-                            {mainView === 'camera' && <LiveVideoFeed telemetry={telemetry} isMain={true} />}
-                            {mainView === '3d' && <Drone3DView telemetry={telemetry} isMain={true} />}
-                        </div>
-
-                        {/* 2. VIEW CONTROLS (Top Left) */}
                         <div className="absolute top-4 left-4 z-[50] bg-gray-800/90 backdrop-blur p-1 rounded-lg border border-gray-600 flex gap-1 shadow-lg">
                             <button onClick={() => setMainView('map')} className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${mainView === 'map' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}><MapIcon size={14} /> MAP</button>
                             <button onClick={() => setMainView('camera')} className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${mainView === 'camera' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}><Video size={14} /> CAM</button>
                             <button onClick={() => setMainView('3d')} className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${mainView === '3d' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}><Cube size={14} /> 3D</button>
                         </div>
-
-                        {/* 3. LAYER ATAS (PIP / KOTAK KECIL) */}
-                        <div 
-                            onClick={() => switchView(mainView === 'map' ? 'camera' : 'map')}
-                            className="absolute top-4 right-4 w-72 h-48 bg-black rounded-xl border-2 border-white/30 shadow-2xl z-50 overflow-hidden cursor-pointer hover:border-blue-500 hover:scale-105 transition-all group"
-                        >
-                            {/* Logic: If Main is Map, show Camera (Default). If Main is Camera/3D, show Map */}
-                            {mainView === 'map' ? (
-                                <LiveVideoFeed telemetry={telemetry} isMain={false} />
-                            ) : (
-                                <MapView id="map-container-pip" telemetry={telemetry} pathData={pathDataRef.current} isMain={false} />
-                            )}
-                            
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Maximize className="text-white drop-shadow-md"/>
-                            </div>
+                        <div className="absolute inset-0 z-0">
+                            {mainView === 'map' && <MapView id="map-container-main" telemetry={telemetry} pathData={pathDataRef.current} isMain={true} />}
+                            {mainView === 'camera' && <LiveVideoFeed telemetry={telemetry} isMain={true} />}
+                            {mainView === '3d' && <Drone3DView telemetry={telemetry} isMain={true} />}
+                        </div>
+                        <div onClick={() => switchView(mainView === 'map' ? 'camera' : 'map')} className="absolute top-4 right-4 w-72 h-48 bg-black rounded-xl border-2 border-white/30 shadow-2xl z-50 overflow-hidden cursor-pointer hover:border-blue-500 hover:scale-105 transition-all group">
+                            {mainView === 'map' ? <LiveVideoFeed telemetry={telemetry} isMain={false} /> : <MapView id="map-container-pip" telemetry={telemetry} pathData={pathDataRef.current} isMain={false} />}
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Maximize className="text-white drop-shadow-md"/></div>
                         </div>
                     </div>
-
                     <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col overflow-y-auto z-20 shadow-xl">
                         <div className="p-6 border-b border-gray-700 flex flex-col items-center">
                             <h3 className="text-gray-400 text-xs font-bold uppercase mb-4 w-full text-left">Artificial Horizon</h3>
@@ -504,7 +457,7 @@ const App = () => {
                         </div>
                         <div className="grid grid-cols-2 gap-px bg-gray-700 border-b border-gray-700">
                             <div className="bg-gray-800 p-4 flex flex-col items-center"><ArrowUp size={20} className="text-blue-400 mb-1" /><span className="text-2xl font-mono font-bold">{Math.max(0, telemetry.altitude_relative).toFixed(1)}</span><span className="text-xs text-gray-500">ALT (m)</span></div>
-                            <div className="bg-gray-800 p-4 flex flex-col items-center"><Activity size={20} className="text-yellow-400 mb-1" /><span className="text-2xl font-mono font-bold">{telemetry.ground_speed.toFixed(1)}</span><span className="text-xs text-gray-500">SPEED (m/s)</span></div>
+                            <div className="bg-gray-800 p-4 flex flex-col items-center"><Activity size={20} className="text-yellow-400 mb-1" /><span className="text-2xl font-mono font-bold">{telemetry.ground_speed.toFixed(1)}</span><span className="text-xs text-gray-500">SPD (m/s)</span></div>
                             <div className="bg-gray-800 p-4 flex flex-col items-center"><Compass size={20} className="text-red-400 mb-1" /><span className="text-2xl font-mono font-bold">{telemetry.heading.toFixed(0)}°</span><span className="text-xs text-gray-500">HEADING</span></div>
                             <div className="bg-gray-800 p-4 flex flex-col items-center"><Signal size={20} className="text-green-400 mb-1" /><span className="text-2xl font-mono font-bold">{telemetry.satellites}</span><span className="text-xs text-gray-500">SATS</span></div>
                         </div>
@@ -519,7 +472,6 @@ const App = () => {
                  </>
              )}
 
-             {/* MISSION PLANNER */}
              {activeTab === 'missions' && (
                  <div className="flex-1 bg-gray-900 p-8 overflow-y-auto">
                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3"><MapIcon/> Mission Planner</h2>
@@ -531,17 +483,16 @@ const App = () => {
                             </div>
                             <button onClick={startMission} className={`px-6 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-all ${telemetry.armed ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`} disabled={!telemetry.armed}><Play size={20}/> START MISSION</button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-                            <MissionCard title="Figure 8 Infinite" icon={RefreshCw} description="Terbang pola angka 8 (Lemniscate) secara terus menerus untuk demonstrasi manuver." onUpload={uploadFigure8} />
-                            <MissionCard title="Square Mapping" icon={Box} description="Terbang pola persegi mengelilingi titik awal. Cocok untuk mapping area sederhana." onUpload={uploadSquare} />
-                            <MissionCard title="Grid Scan (Survey)" icon={Grid} description="Pola Zig-Zag (Lawnmower) untuk survei foto udara area persegi panjang." onUpload={uploadScan} />
-                            <MissionCard title="Spiral Search" icon={Target} description="Terbang melingkar dari dalam ke luar (Spiral) untuk pencarian area (SAR)." onUpload={uploadSpiral} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <MissionCard title="Figure 8 Infinite" icon={RefreshCw} description="Terbang pola angka 8 (Lemniscate) secara terus menerus." onUpload={uploadFigure8} />
+                            <MissionCard title="Square Mapping" icon={Box} description="Terbang pola persegi mengelilingi titik awal." onUpload={uploadSquare} />
+                            <MissionCard title="Grid Scan" icon={Grid} description="Pola Zig-Zag untuk survei foto udara." onUpload={uploadScan} />
+                            <MissionCard title="Spiral Search" icon={Target} description="Terbang melingkar untuk pencarian area." onUpload={uploadSpiral} />
                         </div>
                     </div>
                  </div>
              )}
 
-             {/* PRE-FLIGHT CHECK */}
              {activeTab === 'preflight' && (
                  <div className="flex-1 bg-gray-900 p-8 overflow-y-auto">
                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3"><ClipboardCheck/> Pre-Flight Checklist</h2>
@@ -556,7 +507,7 @@ const App = () => {
                             </div>
                         ))}
                     </div>
-                    <div className="mt-6 flex justify-end max-w-3xl"><button onClick={runPreflightCheck} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg flex items-center gap-2"><RefreshCw size={20} className={preflightData.some(i => i.status === 'PENDING' && i.detail === 'Checking...') ? 'animate-spin' : ''}/> RUN DIAGNOSTICS</button></div>
+                    <div className="mt-6 flex justify-end max-w-3xl"><button onClick={runPreflightCheck} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg flex items-center gap-2"><RefreshCw size={20} className={preflightData.some(i => i.status === 'PENDING') ? 'animate-spin' : ''}/> RUN DIAGNOSTICS</button></div>
                  </div>
              )}
           </main>
